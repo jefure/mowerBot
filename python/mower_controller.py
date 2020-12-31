@@ -1,16 +1,13 @@
 #! /usr/bin/env python
 
-import hcsr04
 import time
 import piconzero as pz
 from inputs import get_gamepad
 import serial
 
 pz.init()
-hcsr04.init()
 arduino = serial.Serial('/dev/ttyACM0', 115200, timeout=.1)
 
-MIN_DISTANCE = 30
 state = {"command": "stop", "motors": {"left": 127, "right": 127},
     "speed": 0, "mower": 0, "updated": False}
 
@@ -21,29 +18,31 @@ pz.setOutputConfig(1, 0)
 
 
 def main():
-    distance = 100
     global state
 
     try:
         while True:
-            mpu = arduino.readline()
+            # arduinoData = arduino.read(arduino.inWaiting())
+            arduinoData = arduino.readline()
             _state = read_gamepad_event()
-#            print("MPU: ", mpu)
-            
+            if arduinoData:
+                data = arduinoData.split(";")
+                print("Data", data)
+		if data[4] is "1":
+                    print("stop detected")
+                    _state["updated"] = True
+                    _state["command"] = "back"
+
             if _state["updated"]:
                 state = _state
                 driver(state)
                 mower_driver(state["mower"])
-						
-                # if distance < MIN_DISTANCE:
-                #    driver("back")
 
     except KeyboardInterrupt:
         print
 
     finally:
         pz.cleanup()
-        hcsr04.cleanup()
 
 def gamepad_reader(run_event):
     while run_event.is_set():
@@ -86,7 +85,6 @@ def read_gamepad_event():
                 new_state = "forward"
                 updated = True
                 speed = val
-				
             elif event.code == 'ABS_Z':
                 if (event.state > 20):
                         val = 127 - event.state
@@ -105,7 +103,7 @@ def driver(state):
         right = 127 - motors["right"] + state["speed"]
         if left < 5 and left > -5:
             left = 0
-                    
+ 
         if right < 5 and right > -5:
             right = 0
                 

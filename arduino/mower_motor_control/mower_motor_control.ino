@@ -1,4 +1,3 @@
-#include <ArduinoJson.h>
 #include <NewPing.h>
 #include<Wire.h>
 
@@ -13,7 +12,7 @@ const short IR1 = 2;
 const short IR2 = 3;
 // used for older arduino ide versions
 const short LED_BUILDIN = 13;
-const int RPM_FACTOR = 60 * 1000;
+const long RPM_FACTOR = 60000; // = 1 minute
 //const int MPU=0x68;
 
 int16_t AcX,AcY,AcZ,Tmp,GyX,GyY,GyZ;
@@ -42,7 +41,7 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(IR1, INPUT);
   pinMode(IR2, INPUT);
-  //attachInterrupt(digitalPinToInterrupt(IR1), addLeft, FALLING);
+  attachInterrupt(digitalPinToInterrupt(IR1), addLeft, FALLING);
   attachInterrupt(digitalPinToInterrupt(IR2), addRight, FALLING);
   // init mpu
   /*Wire.begin();
@@ -155,7 +154,7 @@ void addRight() {
   rightEventCount++;
   // the ir sensor fires 4 times, so only the 4th times counts
   if (rightEventCount == 5) {
-    addCount(true, prevTimeRight);
+    addCount(false, prevTimeRight);
     rightEventCount = 0;
   }
   
@@ -163,7 +162,6 @@ void addRight() {
 
 void addCount(boolean isLeft, long prevTime) {
   int timeDiv = millis() - prevTime;
-  Serial.println(timeDiv);
   if (timeDiv > 600) {
     if (isLeft) {
       countLeft = countLeft + 1;
@@ -201,5 +199,5 @@ void sendData() {
   output += ";";
   output.concat(obstacleDetected);
   output += ";";
-  Serial.println(output);
+  Serial.print(output);
  }
