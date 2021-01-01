@@ -23,20 +23,20 @@ def main():
     try:
         while True:
             # arduinoData = arduino.read(arduino.inWaiting())
-            arduinoData = arduino.readline()
+            # arduinoData = arduino.readline()
             _state = read_gamepad_event()
-            if arduinoData:
-                data = arduinoData.split(";")
-                print("Data", data)
-		if data[4] is "1":
-                    print("stop detected")
-                    _state["updated"] = True
-                    _state["command"] = "back"
+            # if arduinoData:
+            #    data = arduinoData.split(";")
+            #    print("Data", data)
+	    # if data[4] is "1":
+            #        print("stop detected")
+            #        _state["updated"] = True
+            #        _state["command"] = "back"
 
             if _state["updated"]:
                 state = _state
-                driver(state)
-                mower_driver(state["mower"])
+                driver(state, arduino)
+                mower_driver(state["mower"], arduino)
 
     except KeyboardInterrupt:
         print
@@ -95,7 +95,7 @@ def read_gamepad_event():
     return {"command": new_state, "motors": motors, "mower":mower,
                  "speed": speed, "updated": updated}
 
-def driver(state):
+def driver(state, arduino):
     command = state["command"]
     if command == "forward":
         motors = state["motors"]
@@ -103,17 +103,18 @@ def driver(state):
         right = 127 - motors["right"] + state["speed"]
         if left < 5 and left > -5:
             left = 0
- 
+
         if right < 5 and right > -5:
             right = 0
-                
+
         print("speeds:", left, right)
-        
+
         if left is 0 and right is 0:
-            pz.stop()
+            arduino.write(b'0:0')
         else:
-            pz.setMotor(0, left)
-            pz.setMotor(1, right)
+            cmd = str(left) + ":" + str(right)
+            print("Command: ", cmd)
+            arduino.write(cmd.encode())
     elif command == "back":
         pz.stop()
         pz.reverse(state["speed"])
@@ -124,7 +125,7 @@ def driver(state):
     else:
         pz.stop()
 
-def mower_driver(speed):
+def mower_driver(speed, arduino):
     if speed is 1:
         arduino.write(b'A')
     else:

@@ -4,10 +4,14 @@
 #define TRIGGER_PIN  6  // Arduino pin tied to trigger pin on the ultrasonic sensor.
 #define ECHO_PIN     7  // Arduino pin tied to echo pin on the ultrasonic sensor.
 #define MAX_DISTANCE 200 // Maximum distance we want to ping for (in centimeters). Maximum sensor distance is rated at 400-500cm.
+#define INPUT_SIZE 7 // Input looks like 200:200
 
-const short MOTOR = 10;
-const short IN1 = 9;
-const short IN2 = 8;
+const short MOTOR1 = 10;
+const short IN1 = 8;
+const short IN2 = 9;
+const short MOTOR2 = 11;
+const short IN3 = 13;
+const short IN4 = 12;
 const short IR1 = 2;
 const short IR2 = 3;
 // used for older arduino ide versions
@@ -50,7 +54,7 @@ void setup() {
   Wire.write(0);    
   Wire.endTransmission(true);*/
   // put your setup code here, to run once:
-  pinMode(MOTOR, OUTPUT);    
+  pinMode(MOTOR1, OUTPUT);    
   pinMode(IN1, OUTPUT);
   pinMode(IN2, OUTPUT);
 
@@ -59,18 +63,34 @@ void setup() {
 }
 
 void loop() {  
-  int dataReceived = -1;
   if(Serial.available() > 0) {
-	  dataReceived = Serial.read();
-
-    if (dataReceived == '1') {
-      runMotor(255);
-      digitalWrite( LED_BUILDIN, HIGH);
-    } else if (dataReceived == '0') {
-       stopMotor();
-       digitalWrite( LED_BUILDIN, LOW);
-    } else if (dataReceived == '3') {
-       digitalWrite( LED_BUILDIN, HIGH);
+    char dataReceived[INPUT_SIZE + 1];
+	  byte size = Serial.readBytes(dataReceived, INPUT_SIZE);
+    if (size > 1) {
+      short left = 0;
+      short right = 0;
+      // add ending 0
+      dataReceived[size] = 0;
+      // Read command pair
+      char* command = strtok(dataReceived, ":");
+      byte count = 0;
+      while (command != 0) {
+        Serial.print("Cmd:" );
+        Serial.println(command);
+        switch (count) {
+          case 0:
+            left = atoi(command);
+            break;
+          case 1:
+            right = atoi(command);
+            break;
+          default:
+            break;
+        }
+        count++;
+        command = strtok(0, ":");
+      }
+      runMotors(left, right);
     }
   }
 
@@ -83,18 +103,17 @@ void loop() {
   //readMpu();  
 }
 
-void runMotor(int power) {
-  digitalWrite(IN1, LOW);  // Motor 1 beginnt zu rotieren
-  digitalWrite(IN2, HIGH);
-  analogWrite(MOTOR, power);
+void runMotors(short leftPower, short rightPower) {
+  digitalWrite(IN1, HIGH);  // Motor 1 beginnt zu rotieren
+  digitalWrite(IN2, LOW);
+  analogWrite(MOTOR1, leftPower);
+
+  digitalWrite(IN3, HIGH);  // Motor 1 beginnt zu rotieren
+  digitalWrite(IN4, LOW);
+  analogWrite(MOTOR2, rightPower);
 }
 
-void stopMotor() {
-  digitalWrite(IN1, HIGH);  
-  digitalWrite(IN2, LOW);
-  analogWrite(MOTOR, 200);
-  delay(500);
-  
+void stopMotor() {  
   digitalWrite(IN1, LOW);
   digitalWrite(IN2, LOW);
 }
@@ -180,6 +199,7 @@ void updateData() {
   float distance = sonar.ping_cm();
   if (distance < 10) {
     obstacleDetected = true;
+    runMotors(0, 0);
   } else {
     obstacleDetected = false;
   }
