@@ -1,5 +1,6 @@
 #include <NewPing.h>
 #include<Wire.h>
+#include "SerialTransfer.h"
 
 #define TRIGGER_PIN  6  // Arduino pin tied to trigger pin on the ultrasonic sensor.
 #define ECHO_PIN     7  // Arduino pin tied to echo pin on the ultrasonic sensor.
@@ -37,11 +38,16 @@ volatile long rpmLeft = 0;
 volatile short leftEventCount = 0;
 volatile short rightEventCount = 0;
 
+SerialTransfer transfer;
+
+byte incoming[2];
+
 NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE); // NewPing setup of pins and maximum distance.
 
 void setup() {
   //  enable serial
   Serial.begin(115200);
+  transfer.begin(Serial);
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(IR1, INPUT);
   pinMode(IR2, INPUT);
@@ -64,7 +70,7 @@ void setup() {
 
 void loop() {  
   if(Serial.available() > 0) {
-    char dataReceived[INPUT_SIZE + 1];
+    /*char dataReceived[INPUT_SIZE + 1];
 	  byte size = Serial.readBytes(dataReceived, INPUT_SIZE);
     if (size > 1) {
       short left = 0;
@@ -75,8 +81,6 @@ void loop() {
       char* command = strtok(dataReceived, ":");
       byte count = 0;
       while (command != 0) {
-        Serial.print("Cmd:" );
-        Serial.println(command);
         switch (count) {
           case 0:
             left = atoi(command);
@@ -85,37 +89,54 @@ void loop() {
             right = atoi(command);
             break;
           default:
+            count = 0;
             break;
         }
         count++;
         command = strtok(0, ":");
+      }*/
+
+     
+      for (int i = 0; i < 2; i++) {
+        incoming[i] = Serial.read();
       }
-      runMotors(left, right);
-    }
+  
+      runMotors(incoming[0], incoming[1]);
   }
 
-  if ((millis() - prevTime) >= 1000) {
+  if ((millis() - prevTime) >= 500) {
     updateData();
     prevTime = millis();
   }
+
+  if (obstacleDetected) {
+      stopMotors();
+  }
        
-  // put your main code here, to run repeatedly:
   //readMpu();  
 }
 
-void runMotors(short leftPower, short rightPower) {
+void runMotors(byte leftPower, byte rightPower) {
+  Serial.print("Left: ");
+  Serial.print(leftPower);
+  Serial.print(" Right: ");
+  Serial.println(rightPower);
   digitalWrite(IN1, HIGH);  // Motor 1 beginnt zu rotieren
   digitalWrite(IN2, LOW);
   analogWrite(MOTOR1, leftPower);
 
-  digitalWrite(IN3, HIGH);  // Motor 1 beginnt zu rotieren
+  digitalWrite(IN3, HIGH);  // Motor 2 beginnt zu rotieren
   digitalWrite(IN4, LOW);
   analogWrite(MOTOR2, rightPower);
 }
 
-void stopMotor() {  
+void stopMotors() {  
   digitalWrite(IN1, LOW);
   digitalWrite(IN2, LOW);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, LOW);
+  analogWrite(MOTOR1, 0);
+  analogWrite(MOTOR2, 0);  
 }
 
 /*void readMpu() {
@@ -199,7 +220,6 @@ void updateData() {
   float distance = sonar.ping_cm();
   if (distance < 10) {
     obstacleDetected = true;
-    runMotors(0, 0);
   } else {
     obstacleDetected = false;
   }
@@ -219,5 +239,5 @@ void sendData() {
   output += ";";
   output.concat(obstacleDetected);
   output += ";";
-  Serial.print(output);
+  //Serial.print(output);
  }
