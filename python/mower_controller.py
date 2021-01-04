@@ -1,129 +1,112 @@
 #! /usr/bin/env python
 
 import time
-import piconzero as pz
-from inputs import get_gamepad
+import os
+import pygame
 import serial
+import sys
+import struct
 
-pz.init()
+os.environ["SDL_VIDEODRIVER"] = "dummy" # Removes the need to have a GUI window
+pygame.init()
 arduino = serial.Serial('/dev/ttyACM0', 115200, timeout=.1)
 
-state = {"command": "stop", "motors": {"left": 127, "right": 127},
-    "speed": 0, "mower": 0, "updated": False}
-
-# init motor
-# set pin 1 and 2 to digital output
-pz.setOutputConfig(1, 0)
-pz.setOutputConfig(1, 0)
-
-
 def main():
-    global state
-
+    print("Waiting for joystick... (press CTRL+C to abort)")
     try:
         while True:
-            # arduinoData = arduino.read(arduino.inWaiting())
-            # arduinoData = arduino.readline()
-            _state = read_gamepad_event()
-            # if arduinoData:
-            #    data = arduinoData.split(";")
-            #    print("Data", data)
-	    # if data[4] is "1":
-            #        print("stop detected")
-            #        _state["updated"] = True
-            #        _state["command"] = "back"
-
-            if _state["updated"]:
-                state = _state
-                driver(state, arduino)
-                mower_driver(state["mower"], arduino)
-
+            try:
+                pygame.joystick.init()
+                # Attempt to setup the joystick
+                if pygame.joystick.get_count() < 1:
+                    print("No joystick found")
+                    pygame.joystick.quit()
+                    time.sleep(0.1)
+                else:
+                    # We have a joystick, attempt to initialise it!
+                    joystick = pygame.joystick.Joystick(0)                    
+                    break
+            except pygame.error:
+                pygame.joystick.quit()
+                time.sleep(0.1)
     except KeyboardInterrupt:
-        print
-
-    finally:
-        pz.cleanup()
-
-def gamepad_reader(run_event):
-    while run_event.is_set():
-        read_gamepad_event()
-
-def read_gamepad_event():
-    mower = state["mower"]
-    new_state = "wait"
-    updated = False
-    motors = state["motors"]
-    speed = state["speed"]
-
-    events = get_gamepad()
+        # CTRL+C exit, give up
+        print("\nUser aborted")
+        sys.exit()
+        
+    joystick.init()
+    
+    print("Joystick initialized")
+    
+    try:
+        while True:
+            state = getState(joystick)
+            
+            if state:
+                driver(state, arduino)
+                #mower_driver(state["mower"]["speed"], arduino)
+    except KeyboardInterrupt:
+        print("\nBye")
+    
+def getState(joystick):
+    state = {"command": "stop", "motors": {"left": 0, "right": 0}, "mower": {"speed": 0}, "updated": False, "running": True}
+    hadEvent = False
+    events = pygame.event.get()
     for event in events:
-        if event.ev_type == 'Key' and event.state == 1:
-            if event.code == 'BTN_SOUTH':
-                new_state = "auto"
-                updated = True
-            elif event.code == 'BTN_EAST':
-                new_state = "stop"
-                mower = 0
-                updated = True
-            elif event.code == 'BTN_WEST':
-                new_state = "back"
-                updated = True
-            elif event.code == 'BTN_NORTH':
-                new_state = "wait"
-                updated = True
-            elif event.code == 'BTN_TR':
-                mower = 1
-                updated = True
-            elif event.code == 'BTN_TL':
-                mower = 0
-                updated = True
+        if event.type == pygame.JOYAXISMOTION:
+            # A joystick has been moved
+            hadEvent = True
 
-        if event.ev_type == 'Absolute' and event.state != 0:
-            # read right joystick
-            if event.code == 'ABS_RZ':
-                val = 128 - event.state
-                new_state = "forward"
-                updated = True
-                speed = val
-            elif event.code == 'ABS_Z':
-                if (event.state > 20):
-                        val = 127 - event.state
-                        new_state = "steering"
-                        motors["left"] = 127 - val
-                        motors["right"] = 127 + val
+        if hadEvent:
+            upDown = -joystick.get_axis(1)
+            print("UpDown: ", upDown)
+            leftRight = -joystick.get_axis(2)
+            if leftRight < -0.05:
+                state["motors"]["left"] = 255 * leftRight * -1
+            elif leftRight > 0.05:
+                state["motors"]["right"] = 255 * leftRight
+            else:
+                state["motors"]["right"] = 255 * upDown
+                state["motors"]["left"] = 255 * upDown
 
-    return {"command": new_state, "motors": motors, "mower":mower,
-                 "speed": speed, "updated": updated}
+            if upDown < -0.05:
+                state["motors"]["right"] = state["motors"]["right"] * -1
+                state["motors"]["left"] = state["motors"]["left"] * -1
+                state["command"] = "back"
+            elif upDown > 0.05:
+                state["command"] = "forward"
+            else:
+                print("Stop!")
+                state["command"] = "stop"
+                state["motors"]["right"] = 0
+                state["motors"]["left"] = 0
+                
+            state["motors"]["right"] = int(state["motors"]["right"])
+            state["motors"]["left"] = int(state["motors"]["left"])
+
+            state["updated"] = True
+            return state
+
 
 def driver(state, arduino):
     command = state["command"]
     if command == "forward":
         motors = state["motors"]
-        left = 127 - motors["left"] + state["speed"]
-        right = 127 - motors["right"] + state["speed"]
-        if left < 5 and left > -5:
-            left = 0
 
-        if right < 5 and right > -5:
-            right = 0
-
-        print("speeds:", left, right)
-
-        if left is 0 and right is 0:
-            arduino.write(b'0:0')
+        if motors["left"] == 0 and motors["right"] == 0:
+            arduino.write(struct.pack('>BB', 0, 0))
         else:
-            cmd = str(left) + ":" + str(right)
+            cmd = struct.pack('>BB', motors["left"], motors["right"])
             print("Command: ", cmd)
-            arduino.write(cmd.encode())
+            arduino.write(cmd)
     elif command == "back":
-        pz.stop()
-        pz.reverse(state["speed"])
-        time.sleep(2)
-        pz.spinLeft(state["speed"])
-        time.sleep(4)
-        pz.forward(state["speed"])
+        print("Back!")
+        arduino.write(struct.pack('>BB', 0, 0))
     else:
-        pz.stop()
+        arduino.write(struct.pack('>BB', 0, 0))
+        
+    reply = arduino.readline()
+    print("Arduino: ", reply)
 
 def mower_driver(speed, arduino):
     if speed is 1:

@@ -4,7 +4,7 @@ import pygame
 os.environ["SDL_VIDEODRIVER"] = "dummy" # Removes the need to have a GUI window
 pygame.init()
 
-print 'Waiting for joystick... (press CTRL+C to abort)'
+print("Waiting for joystick... (press CTRL+C to abort)")
 while True:
     try:
         try:

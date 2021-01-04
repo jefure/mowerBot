@@ -1,6 +1,5 @@
 #include <NewPing.h>
 #include<Wire.h>
-#include "SerialTransfer.h"
 
 #define TRIGGER_PIN  6  // Arduino pin tied to trigger pin on the ultrasonic sensor.
 #define ECHO_PIN     7  // Arduino pin tied to echo pin on the ultrasonic sensor.
@@ -38,8 +37,6 @@ volatile long rpmLeft = 0;
 volatile short leftEventCount = 0;
 volatile short rightEventCount = 0;
 
-SerialTransfer transfer;
-
 byte incoming[2];
 
 NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE); // NewPing setup of pins and maximum distance.
@@ -47,7 +44,6 @@ NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE); // NewPing setup of pins and
 void setup() {
   //  enable serial
   Serial.begin(115200);
-  transfer.begin(Serial);
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(IR1, INPUT);
   pinMode(IR2, INPUT);
@@ -69,7 +65,7 @@ void setup() {
 }
 
 void loop() {  
-  if(Serial.available() > 0) {
+  if(Serial.available() >= 2) {
     /*char dataReceived[INPUT_SIZE + 1];
 	  byte size = Serial.readBytes(dataReceived, INPUT_SIZE);
     if (size > 1) {
