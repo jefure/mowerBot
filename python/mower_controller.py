@@ -59,10 +59,9 @@ def getState(joystick):
 
         if hadEvent:
             upDown = -joystick.get_axis(1)
-            print("UpDown: ", upDown)
             leftRight = -joystick.get_axis(2)
             if leftRight < -0.05:
-                state["motors"]["left"] = 255 * leftRight * -1
+                state["motors"]["left"] = 255 * leftRight
             elif leftRight > 0.05:
                 state["motors"]["right"] = 255 * leftRight
             else:
@@ -70,19 +69,22 @@ def getState(joystick):
                 state["motors"]["left"] = 255 * upDown
 
             if upDown < -0.05:
-                state["motors"]["right"] = state["motors"]["right"] * -1
-                state["motors"]["left"] = state["motors"]["left"] * -1
                 state["command"] = "back"
             elif upDown > 0.05:
                 state["command"] = "forward"
             else:
-                print("Stop!")
                 state["command"] = "stop"
                 state["motors"]["right"] = 0
                 state["motors"]["left"] = 0
                 
             state["motors"]["right"] = int(state["motors"]["right"])
             state["motors"]["left"] = int(state["motors"]["left"])
+            
+            if state["motors"]["right"] < 0:
+                state["motors"]["right"] = state["motors"]["right"] * -1
+            
+            if state["motors"]["left"] < 0:
+                state["motors"]["left"] = state["motors"]["left"] * -1
 
             state["updated"] = True
             return state
@@ -90,23 +92,16 @@ def getState(joystick):
 
 def driver(state, arduino):
     command = state["command"]
+    motors = state["motors"]
     if command == "forward":
-        motors = state["motors"]
-
         if motors["left"] == 0 and motors["right"] == 0:
-            arduino.write(struct.pack('>BB', 0, 0))
+            arduino.write(struct.pack('>BBB', 0, 0, 0))
         else:
-            cmd = struct.pack('>BB', motors["left"], motors["right"])
-            print("Command: ", cmd)
-            arduino.write(cmd)
+            arduino.write(struct.pack('>BBB', motors["left"], motors["right"], 1))
     elif command == "back":
-        print("Back!")
-        arduino.write(struct.pack('>BB', 0, 0))
+            arduino.write(struct.pack('>BBB', motors["left"], motors["right"], 2))
     else:
-        arduino.write(struct.pack('>BB', 0, 0))
-        
-    reply = arduino.readline()
-    print("Arduino: ", reply)
+        arduino.write(struct.pack('>BBB', 0, 0, 0))
 
 def mower_driver(speed, arduino):
     if speed is 1:

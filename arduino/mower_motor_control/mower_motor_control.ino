@@ -37,7 +37,7 @@ volatile long rpmLeft = 0;
 volatile short leftEventCount = 0;
 volatile short rightEventCount = 0;
 
-byte incoming[2];
+byte incoming[3];
 
 NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE); // NewPing setup of pins and maximum distance.
 
@@ -47,6 +47,7 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(IR1, INPUT);
   pinMode(IR2, INPUT);
+  // init interrupts
   attachInterrupt(digitalPinToInterrupt(IR1), addLeft, FALLING);
   attachInterrupt(digitalPinToInterrupt(IR2), addRight, FALLING);
   // init mpu
@@ -55,49 +56,23 @@ void setup() {
   Wire.write(0x6B); 
   Wire.write(0);    
   Wire.endTransmission(true);*/
-  // put your setup code here, to run once:
-  pinMode(MOTOR1, OUTPUT);    
+  // init moto pins
+  pinMode(MOTOR1, OUTPUT);
+  pinMode(MOTOR2, OUTPUT); 
   pinMode(IN1, OUTPUT);
   pinMode(IN2, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
 
   prevTime = millis();
   prevTimeRight = millis();
 }
 
 void loop() {  
-  if(Serial.available() >= 2) {
-    /*char dataReceived[INPUT_SIZE + 1];
-	  byte size = Serial.readBytes(dataReceived, INPUT_SIZE);
-    if (size > 1) {
-      short left = 0;
-      short right = 0;
-      // add ending 0
-      dataReceived[size] = 0;
-      // Read command pair
-      char* command = strtok(dataReceived, ":");
-      byte count = 0;
-      while (command != 0) {
-        switch (count) {
-          case 0:
-            left = atoi(command);
-            break;
-          case 1:
-            right = atoi(command);
-            break;
-          default:
-            count = 0;
-            break;
-        }
-        count++;
-        command = strtok(0, ":");
-      }*/
-
-     
-      for (int i = 0; i < 2; i++) {
+  if(Serial.available() >= 3) {     
+      for (int i = 0; i < 3; i++) {
         incoming[i] = Serial.read();
       }
-  
-      runMotors(incoming[0], incoming[1]);
   }
 
   if ((millis() - prevTime) >= 500) {
@@ -105,24 +80,29 @@ void loop() {
     prevTime = millis();
   }
 
-  if (obstacleDetected) {
-      stopMotors();
+  if (obstacleDetected || incoming[2] == 0) {
+    stopMotors();
+  } else {
+    runMotors(incoming[0], incoming[1], incoming[2]);
   }
        
   //readMpu();  
 }
 
-void runMotors(byte leftPower, byte rightPower) {
-  Serial.print("Left: ");
-  Serial.print(leftPower);
-  Serial.print(" Right: ");
-  Serial.println(rightPower);
-  digitalWrite(IN1, HIGH);  // Motor 1 beginnt zu rotieren
-  digitalWrite(IN2, LOW);
-  analogWrite(MOTOR1, leftPower);
+void runMotors(byte leftPower, byte rightPower, byte dir) {
+  if (dir == 1) {
+    digitalWrite(IN1, HIGH);
+    digitalWrite(IN2, LOW);  
+    digitalWrite(IN3, HIGH);
+    digitalWrite(IN4, LOW);
+  } else if (dir == 2) {
+    digitalWrite(IN1, LOW);
+    digitalWrite(IN2, HIGH);  
+    digitalWrite(IN3, LOW);
+    digitalWrite(IN4, HIGH);
+  }
 
-  digitalWrite(IN3, HIGH);  // Motor 2 beginnt zu rotieren
-  digitalWrite(IN4, LOW);
+  analogWrite(MOTOR1, leftPower);
   analogWrite(MOTOR2, rightPower);
 }
 
