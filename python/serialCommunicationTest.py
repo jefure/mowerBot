@@ -1,50 +1,45 @@
 import serial
-from inputs import get_gamepad
+import struct
+
 arduino = serial.Serial('/dev/ttyACM0', 115200, timeout=.1)
-state = {"command": "stop", "motors": {"left": 127, "right": 127},
-    "speed": 0, "mower": 0, "updated": False}
 
 def main():
-    distance = 100
-    global state
-
     try:
         while True:
-            _state = read_gamepad_event()
+            x = input("Enter 1, 2 or 3: ")
+            print("Input is: ", x)
+
+            if x is 1:
+                state = {"command": "forward", "motors": {"left": 125, "right": 125}, "mower": {"speed": 0}, "updated": True, "running": True}
+                driver(state, arduino)
+            elif x is 2:
+                state = {"command": "forward", "motors": {"left": 125, "right": 125}, "mower": {"speed": 120}, "updated": True, "running": True}
+                driver(state, arduino)
+            elif x is 3:
+                state = {"command": "stop", "motors": {"left": 0, "right": 0}, "mower": {"speed": 0}, "updated": True, "running": True}
+                driver(state, arduino)
+
+            #readVal = arduino.read_until()
+            #1
+            # print("Received from arduino: ", readVal)
             
-            if _state["updated"]:
-                state = _state
-                mower_driver(state["mower"])
     except KeyboardInterrupt:
-        print
-        
-def read_gamepad_event():
-    mower = state["mower"]
-    new_state = "wait"
-    updated = False
+        print("bye")
+
+def driver(state, arduino):
+    command = state["command"]
     motors = state["motors"]
-    speed = state["speed"]
-
-    events = get_gamepad()
-    for event in events:
-        if event.ev_type == 'Key' and event.state == 1:
-            if event.code == 'BTN_TR':
-                mower = 1
-                updated = True
-            elif event.code == 'BTN_TL':
-                mower = 0
-                updated = True
-                
-    return {"command": new_state, "motors": motors, "mower":mower,
-                 "speed": speed, "updated": updated}
-
-def mower_driver(speed):
-    print("Send mower:", speed)
-    if speed is 1:
-        arduino.write(b'A')
+    if command == "forward":
+        print("Cmd: forward", state)
+        if motors["left"] == 0 and motors["right"] == 0:
+            arduino.write(struct.pack('>BBBB', 0, 0, 0, 0))
+        else:
+            arduino.write(struct.pack('>BBBB', motors["left"], motors["right"], 1, state["mower"]["speed"]))
+    elif command == "back":
+            print("Cmd: back", state)
+            arduino.write(struct.pack('>BBBB', motors["left"], motors["right"], 2, state["mower"]["speed"]))
     else:
-        arduino.write(b'S')
-    res = arduino.readline()
-    print("Arduino:", res)
+        print("Cmd: stop", state)
+        arduino.write(struct.pack('>BBBB', 0, 0, 0, 0))
 
 main()
