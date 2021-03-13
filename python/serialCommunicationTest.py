@@ -9,19 +9,18 @@ def main():
             x = input("Enter 1, 2 or 3: ")
             print("Input is: ", x)
 
-            if x is 1:
+            if x == "1":
                 state = {"command": "forward", "motors": {"left": 125, "right": 125}, "mower": {"speed": 0}, "updated": True, "running": True}
                 driver(state, arduino)
-            elif x is 2:
-                state = {"command": "forward", "motors": {"left": 125, "right": 125}, "mower": {"speed": 120}, "updated": True, "running": True}
+            elif x == "2":
+                state = {"command": "forward", "motors": {"left": 125, "right": 125}, "mower": {"speed": 129}, "updated": True, "running": True}
                 driver(state, arduino)
-            elif x is 3:
+            elif x == "3":
                 state = {"command": "stop", "motors": {"left": 0, "right": 0}, "mower": {"speed": 0}, "updated": True, "running": True}
                 driver(state, arduino)
 
             #readVal = arduino.read_until()
-            #1
-            # print("Received from arduino: ", readVal)
+            #print("Received from arduino: ", readVal)
             
     except KeyboardInterrupt:
         print("bye")
