@@ -95,18 +95,13 @@ def driver(state, arduino):
     motors = state["motors"]
     if command == "forward":
         if motors["left"] == 0 and motors["right"] == 0:
-            arduino.write(struct.pack('>BBB', 0, 0, 0))
+            arduino.write(struct.pack('>BBBB', 0, 0, 0, 0))
         else:
-            arduino.write(struct.pack('>BBB', motors["left"], motors["right"], 1))
+            arduino.write(struct.pack('>BBBB', motors["left"], motors["right"], 1, 255))
     elif command == "back":
-            arduino.write(struct.pack('>BBB', motors["left"], motors["right"], 2))
+            arduino.write(struct.pack('>BBBB', motors["left"], motors["right"], 2, 0))
     else:
-        arduino.write(struct.pack('>BBB', 0, 0, 0))
+        arduino.write(struct.pack('>BBBB', 0, 0, 0, 0))
 
-def mower_driver(speed, arduino):
-    if speed is 1:
-        arduino.write(b'A')
-    else:
-        arduino.write(b'S')
 
 main()
