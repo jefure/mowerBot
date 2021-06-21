@@ -1,23 +1,13 @@
-#include <NewPing.h>
-
-#define TRIGGER_PIN  6  // Arduino pin tied to trigger pin on the ultrasonic sensor.
-#define ECHO_PIN     7  // Arduino pin tied to echo pin on the ultrasonic sensor.
-#define MAX_DISTANCE 200 // Maximum distance we want to ping for (in centimeters). Maximum sensor distance is rated at 400-500cm.
-#define INPUT_SIZE 7 // Input looks like 200:200
-
 const short MOTOR1 = 10;
 const short IN1 = 8;
 const short IN2 = 9;
 const short MOTOR2 = 11;
 const short IN3 = 13;
 const short IN4 = 12;
-const short MOTOR3 = A0;
+const short MOTOR3 = 5;
 // used for older arduino ide versions
 const short LED_BUILDIN = 13;
-boolean obstacleDetected = false;
 byte incoming[4];
-
-NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE); // NewPing setup of pins and maximum distance.
 
 void setup() {
   //  enable serial
@@ -40,15 +30,7 @@ void loop() {
       }      
   }
 
-  //updateData();
-
-  if (obstacleDetected) {
-    stopMotors();
-  } else {
-    runMotors(incoming[0], incoming[1], incoming[2], incoming[3]);
-  }
-
-  //sendData();
+  runMotors(incoming[0], incoming[1], incoming[2], incoming[3]);
 }
 
 void runMotors(byte leftPower, byte rightPower, byte dir, byte mowerPower) {
@@ -64,7 +46,7 @@ void runMotors(byte leftPower, byte rightPower, byte dir, byte mowerPower) {
     digitalWrite(IN4, HIGH);
   }
 
-  if (mowerPower == 129) {
+  if (mowerPower >= 129) {
     runMower();
   } else {
     stopMower();
@@ -81,6 +63,7 @@ void stopMotors() {
   digitalWrite(IN4, LOW);
   analogWrite(MOTOR1, 0);
   analogWrite(MOTOR2, 0);
+  stopMower();
 }
 
 void runMower() {
@@ -90,28 +73,3 @@ void runMower() {
 void stopMower() {
   digitalWrite(MOTOR3, LOW);
 }
-
-
-void updateData() {
-  float distance = sonar.ping_cm();
-  if (distance < 10) {
-    obstacleDetected = true;
-  } else {
-    obstacleDetected = false;
-  }
-}
-
-void sendData() {
-  String output = "";
-  output.concat(incoming[0]);
-  output += ";";
-  output.concat(incoming[1]);
-  output += ";";
-  output.concat(incoming[2]);
-  output += ";";
-  output.concat(incoming[3]);
-  output += ";";
-  output.concat(obstacleDetected);
-  output += ";";
-  Serial.println(output);
- }
