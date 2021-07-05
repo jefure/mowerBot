@@ -1,0 +1,3 @@
+hindernis
+kein_hindernis
+unkown
