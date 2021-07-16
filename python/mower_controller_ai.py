@@ -250,7 +250,7 @@ def getState(joystick, label_id, probability):
             state["command"] = "forward"
             state["motors"]["right"] = 255
             state["motors"]["left"] = 255
-        elif label_id == 1 and probability < 0.8:           
+        elif label_id == 1 and probability < 0.9:           
             state["command"] = "forward"
             state["motors"]["right"] = 255
             state["motors"]["left"] = 0
