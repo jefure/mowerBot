@@ -86,8 +86,8 @@ def main():
     global driveMode
     
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--model', help='File path of .tflite file. Default: /home/pi/mowerBot/image_classification/model/model.tflite', required=False, default='/home/pi/mowerBot/image_classification/model/model.tflite')
-    parser.add_argument('--labels', help='File path of labels file. Default: /home/pi/mowerBot/image_classification/model/labelmap.txt', required=False, default='/home/pi/mowerBot/image_classification/model/labelmap.txt')
+    parser.add_argument('--model', help='File path of .tflite file. Default: /home/pi/mowerBot/image_classification/saved_model/model.tflite', required=False, default='/home/pi/mowerBot/image_classification/saved_model/model.tflite')
+    parser.add_argument('--labels', help='File path of labels file. Default: /home/pi/mowerBot/image_classification/saved_model/labelmap.txt', required=False, default='/home/pi/mowerBot/image_classification/saved_model/labelmap.txt')
     parser.add_argument('--dry_run', help='Simulate motor control.', required=False, default=False)
     parser.add_argument('--video', help='MP4 Video file for simulation the camera, can only be used with --dry_run together', required=False)
     parser.add_argument('--preview', help='Preview camera image', required=False, default=False)
@@ -154,6 +154,8 @@ def main():
     
     
 def usePiCamera(labels, width, height, interpreter, joystick, arduino, args):
+    global newClassificationResultAvailable
+    global imageClassificationResult
     preview = args.preview
     isDryRun = args.dry_run
     doSaveImages = args.save_images
@@ -174,12 +176,13 @@ def usePiCamera(labels, width, height, interpreter, joystick, arduino, args):
             
             if useThread:
                 job_queue.put(Job([interpreter, image]))
-                if newClassificationResultAvailable:
+                if newClassificationResultAvailable is True:
                     results = imageClassificationResult
-                    label_id, prob = process_result(results, doSaveImages)
+                    newClassificationResultAvailable = False
+                    label_id, prob = process_result(results, doSaveImages, labels, stream, preview, camera)
             else:
                 results = classify_image(interpreter, image)
-                label_id, prob = process_result(results, doSaveImages)
+                label_id, prob = process_result(results, doSaveImages, labels, stream, preview, camera)
             
 
             state = getState(joystick, label_id, prob)
@@ -193,6 +196,8 @@ def usePiCamera(labels, width, height, interpreter, joystick, arduino, args):
               camera.stop_preview()
           
 def useVideo(labels, videoPath, isDryRun, width, height, interpreter, joystick, arduino):
+    global newClassificationResultAvailable
+    global imageClassificationResult
     """Test the code using a video file"""
     video = cv2.VideoCapture(videoPath)
     imW = video.get(cv2.CAP_PROP_FRAME_WIDTH)
