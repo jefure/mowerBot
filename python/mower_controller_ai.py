@@ -12,9 +12,29 @@ import cv2
 import importlib.util
 import picamera
 import argparse
+import threading
+import queue
 from PIL import Image
 
 driveMode = "manual"
+job_queue = queue.Queue()
+newClassificationResultAvailable = False
+imageClassificationResult = []
+
+class Job(object):
+  def __init__(self, input):
+    self.frame = input[1]
+    self.interpreter = input[0]
+
+class Worker(threading.Thread):
+  def run(self):
+    while True:
+      job = job_queue.get(block=True)
+
+      self.do_job(job)
+
+  def do_job(self, job):
+    result = classify_image(job.interpreter, job.frame)
 
 def set_input_tensor(interpreter, image):
   tensor_index = interpreter.get_input_details()[0]['index']
@@ -23,6 +43,10 @@ def set_input_tensor(interpreter, image):
 
 def classify_image(interpreter, image, top_k=1):
   """Returns a sorted array of classification results."""
+  global imageClassificationResult
+  global newClassificationResultAvailable
+
+  start_time = time.time()  
   set_input_tensor(interpreter, image)
   interpreter.invoke()
   output_details = interpreter.get_output_details()[0]
@@ -34,7 +58,29 @@ def classify_image(interpreter, image, top_k=1):
     output = scale * (output - zero_point)
 
   ordered = np.argpartition(-output, top_k)
-  return [(i, output[i]) for i in ordered[:top_k]]
+  elapsed_ms = (time.time() - start_time) * 1000
+  imageClassificationResult = [[(i, output[i]) for i in ordered[:top_k]], elapsed_ms]
+  newClassificationResultAvailable = True
+  
+  return imageClassificationResult
+
+def process_result(results, doSaveImages, labels, stream, preview, camera):
+        label_id, prob = results[0][0]
+        stream.seek(0)
+        stream.truncate()
+        if preview:
+            camera.annotate_text = '%s %.2f\n%.1fms' % (labels[label_id], prob, results[1])
+        else:
+            print('%s %.2f\n%.1fms' % (labels[label_id], prob, results[1]))
+                
+        if doSaveImages:
+            timestamp = time.time()
+            if label_id == 1 and prob > 0.85:
+                camera.capture(f'/home/pi/Pictures/good/mow_{timestamp}.jpg')
+            else:
+                camera.capture(f'/home/pi/Pictures/bad/mow_{timestamp}.jpg')
+
+        return label_id, prob
 
 def main():
     global driveMode
@@ -47,6 +93,7 @@ def main():
     parser.add_argument('--preview', help='Preview camera image', required=False, default=False)
     parser.add_argument('--drive_mode', help='Change the default drive mode', required=False, default='manual')
     parser.add_argument('--save_images', help='Save images of camera', required=False, default=False)
+    parser.add_argument('--use_thread', help='Run the image classification in a seperate thread', default=False)
     args = parser.parse_args()
     
     os.environ["SDL_VIDEODRIVER"] = "dummy" # Removes the need to have a GUI window
@@ -71,6 +118,9 @@ def main():
     interpreter = Interpreter(modelPath)
     interpreter.allocate_tensors()
     _, height, width, _ = interpreter.get_input_details()[0]['shape']
+
+    worker = Worker()
+    worker.start()
     
     print("Waiting for joystick... (press CTRL+C to abort)")
     try:
@@ -98,40 +148,39 @@ def main():
     
     print("Joystick initialized")
     if not args.video:
-        usePiCamera(labels, args.preview, args.dry_run, width, height, interpreter, joystick, arduino, args.save_images)
+        usePiCamera(labels, width, height, interpreter, joystick, arduino, args)
     else:
         useVideo(labels, args.video, args.dry_run, width, height, interpreter, joystick, arduino)
     
     
-def usePiCamera(labels, preview, isDryRun, width, height, interpreter, joystick, arduino, doSaveImages):
+def usePiCamera(labels, width, height, interpreter, joystick, arduino, args):
+    preview = args.preview
+    isDryRun = args.dry_run
+    doSaveImages = args.save_images
+    useThread = args.use_thread
+    """Get live image from the pi camera and classify the image."""
     print("Use Pi Cam.", preview, labels, isDryRun)
+    label_id = 0
+    prob = 0
     with picamera.PiCamera(resolution=(320, 240), framerate=3) as camera:
         if preview:
             camera.start_preview()
 
         try:
           stream = io.BytesIO()
-          for _ in camera.capture_continuous(
-              stream, format='jpeg', use_video_port=True):
+          for _ in camera.capture_continuous(stream, format='jpeg', use_video_port=True):
             stream.seek(0)
             image = Image.open(stream).convert('RGB').resize((width, height), Image.ANTIALIAS)
-            start_time = time.time()
-            results = classify_image(interpreter, image)
-            elapsed_ms = (time.time() - start_time) * 1000
-            label_id, prob = results[0]
-            stream.seek(0)
-            stream.truncate()
-            if preview:
-                camera.annotate_text = '%s %.2f\n%.1fms' % (labels[label_id], prob, elapsed_ms)
+            
+            if useThread:
+                job_queue.put(Job([interpreter, image]))
+                if newClassificationResultAvailable:
+                    results = imageClassificationResult
+                    label_id, prob = process_result(results, doSaveImages)
             else:
-                print('%s %.2f\n%.1fms' % (labels[label_id], prob, elapsed_ms))
-                
-            if doSaveImages:
-                timestamp = time.time()
-                if label_id == 1 and prob > 0.85:
-                    camera.capture(f'/home/pi/Pictures/good/mow_{timestamp}.jpg')
-                else:
-                    camera.capture(f'/home/pi/Pictures/bad/mow_{timestamp}.jpg')
+                results = classify_image(interpreter, image)
+                label_id, prob = process_result(results, doSaveImages)
+            
 
             state = getState(joystick, label_id, prob)
                 
@@ -144,6 +193,7 @@ def usePiCamera(labels, preview, isDryRun, width, height, interpreter, joystick,
               camera.stop_preview()
           
 def useVideo(labels, videoPath, isDryRun, width, height, interpreter, joystick, arduino):
+    """Test the code using a video file"""
     video = cv2.VideoCapture(videoPath)
     imW = video.get(cv2.CAP_PROP_FRAME_WIDTH)
     imH = video.get(cv2.CAP_PROP_FRAME_HEIGHT)
@@ -155,26 +205,27 @@ def useVideo(labels, videoPath, isDryRun, width, height, interpreter, joystick, 
             break
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         frame_resized = cv2.resize(frame_rgb, (width, height))
-        input_data = np.expand_dims(frame_resized, axis=0)
 
         # Retrieve detection results
-        start_time = time.time()
-        results = classify_image(interpreter, frame_resized)
-        elapsed_ms = (time.time() - start_time) * 1000
-        label_id, prob = results[0]
+        job_queue.put(Job([interpreter, frame_resized]))
+
+        while newClassificationResultAvailable is False:
+            time.sleep(0.001)
+        
+        label_id, prob = imageClassificationResult[0][0]
+        label = '%s: %d%% Time: %.1fms' % (labels[label_id], prob*100, imageClassificationResult[1])
+        newClassificationResultAvailable = False
+
+        font                   = cv2.FONT_HERSHEY_SIMPLEX
+        bottomLeftCornerOfText = (10,470)
+        fontScale              = 1
+        fontColor              = (255,255,255)
+        lineType               = 2
+        cv2.putText(frame, label, bottomLeftCornerOfText, font, fontScale, fontColor, lineType)
+
         state = getState(joystick, label_id, prob)
         if state:
-                driver(state, arduino, isDryRun)
-                
-        label = '%s %.2f\n%.1fms' % (labels[label_id], prob, elapsed_ms)
-        print(label)
-        
-        # Draw label
-        #label = '%s %.2f\n%.1fms' % (labels[label_id], prob, elapsed_ms)
-        #labelSize, baseLine = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2) # Get font size
-        #label_ymin = max(ymin, labelSize[1] + 10) # Make sure not to draw label too close to top of window
-        #cv2.rectangle(frame, (xmin, label_ymin-labelSize[1]-10), (xmin+labelSize[0], label_ymin+baseLine-10), (255, 255, 255), cv2.FILLED) # Draw white box to put label text in
-        #cv2.putText(frame, label, (xmin, label_ymin-7), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2) # Draw label text
+                driver(state, arduino, isDryRun)        
 
         # All the results have been drawn on the frame, so it's time to display it.
         cv2.imshow('Object detector', frame)
