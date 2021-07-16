@@ -64,6 +64,24 @@ def classify_image(interpreter, image, top_k=1):
   
   return imageClassificationResult
 
+def process_result(results, doSaveImages, labels, stream, preview, camera):
+        label_id, prob = results[0][0]
+        stream.seek(0)
+        stream.truncate()
+        if preview:
+            camera.annotate_text = '%s %.2f\n%.1fms' % (labels[label_id], prob, results[1])
+        else:
+            print('%s %.2f\n%.1fms' % (labels[label_id], prob, results[1]))
+                
+        if doSaveImages:
+            timestamp = time.time()
+            if label_id == 1 and prob > 0.85:
+                camera.capture(f'/home/pi/Pictures/good/mow_{timestamp}.jpg')
+            else:
+                camera.capture(f'/home/pi/Pictures/bad/mow_{timestamp}.jpg')
+
+        return label_id, prob
+
 def main():
     global driveMode
     
@@ -75,6 +93,7 @@ def main():
     parser.add_argument('--preview', help='Preview camera image', required=False, default=False)
     parser.add_argument('--drive_mode', help='Change the default drive mode', required=False, default='manual')
     parser.add_argument('--save_images', help='Save images of camera', required=False, default=False)
+    parser.add_argument('--use_thread', help='Run the image classification in a seperate thread', default=False)
     args = parser.parse_args()
     
     os.environ["SDL_VIDEODRIVER"] = "dummy" # Removes the need to have a GUI window
@@ -129,40 +148,39 @@ def main():
     
     print("Joystick initialized")
     if not args.video:
-        usePiCamera(labels, args.preview, args.dry_run, width, height, interpreter, joystick, arduino, args.save_images)
+        usePiCamera(labels, width, height, interpreter, joystick, arduino, args)
     else:
         useVideo(labels, args.video, args.dry_run, width, height, interpreter, joystick, arduino)
     
     
-def usePiCamera(labels, preview, isDryRun, width, height, interpreter, joystick, arduino, doSaveImages):
+def usePiCamera(labels, width, height, interpreter, joystick, arduino, args):
+    preview = args.preview
+    isDryRun = args.dry_run
+    doSaveImages = args.save_images
+    useThread = args.use_thread
     """Get live image from the pi camera and classify the image."""
     print("Use Pi Cam.", preview, labels, isDryRun)
+    label_id = 0
+    prob = 0
     with picamera.PiCamera(resolution=(320, 240), framerate=3) as camera:
         if preview:
             camera.start_preview()
 
         try:
           stream = io.BytesIO()
-          for _ in camera.capture_continuous(
-              stream, format='jpeg', use_video_port=True):
+          for _ in camera.capture_continuous(stream, format='jpeg', use_video_port=True):
             stream.seek(0)
             image = Image.open(stream).convert('RGB').resize((width, height), Image.ANTIALIAS)
             
-            results = classify_image(interpreter, image)
-            label_id, prob = results[0][0]
-            stream.seek(0)
-            stream.truncate()
-            if preview:
-                camera.annotate_text = '%s %.2f\n%.1fms' % (labels[label_id], prob, results[1])
+            if useThread:
+                job_queue.put(Job([interpreter, image]))
+                if newClassificationResultAvailable:
+                    results = imageClassificationResult
+                    label_id, prob = process_result(results, doSaveImages)
             else:
-                print('%s %.2f\n%.1fms' % (labels[label_id], prob, results[1]))
-                
-            if doSaveImages:
-                timestamp = time.time()
-                if label_id == 1 and prob > 0.85:
-                    camera.capture(f'/home/pi/Pictures/good/mow_{timestamp}.jpg')
-                else:
-                    camera.capture(f'/home/pi/Pictures/bad/mow_{timestamp}.jpg')
+                results = classify_image(interpreter, image)
+                label_id, prob = process_result(results, doSaveImages)
+            
 
             state = getState(joystick, label_id, prob)
                 
