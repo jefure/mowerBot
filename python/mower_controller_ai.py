@@ -164,7 +164,7 @@ def usePiCamera(labels, width, height, interpreter, joystick, arduino, args):
     print("Use Pi Cam.", preview, labels, isDryRun)
     label_id = 0
     prob = 0
-    with picamera.PiCamera(resolution=(320, 240), framerate=3) as camera:
+    with picamera.PiCamera(resolution=(320, 240), framerate=5) as camera:
         if preview:
             camera.start_preview()
 
@@ -302,14 +302,18 @@ def getState(joystick, label_id, probability):
             return state
         
     if driveMode == "auto":
-        if label_id == 1 and probability >= 0.8:
+        if label_id == 1 and probability >= 0.9:
             state["command"] = "forward"
-            state["motors"]["right"] = 255
+            state["motors"]["right"] = 240
             state["motors"]["left"] = 255
         elif label_id == 1 and probability < 0.9:           
             state["command"] = "forward"
             state["motors"]["right"] = 255
             state["motors"]["left"] = 0
+        elif label_id == 2:
+            state["command"] = "back"
+            state["motors"]["right"] = 150
+            state["motors"]["left"] = 150            
         else:
             state["command"] = "stop"
             state["motors"]["right"] = 0
