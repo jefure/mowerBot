@@ -22,7 +22,12 @@ import os
 import pygame
 import serial
 import sys
+import struct
 import driver
+from sense_hat import SenseHat
+
+sense = SenseHat()
+
 
 os.environ["SDL_VIDEODRIVER"] = "dummy"  # Removes the need to have a GUI window
 pygame.init()

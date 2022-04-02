@@ -92,19 +92,21 @@ def process_result(results, do_save_images, labels, stream, preview, camera):
     label_id, prob = results[0][0]
     stream.seek(0)
     stream.truncate()
-    if preview:
-        camera.annotate_text = '%s %.2f\n%.1fms' % (labels[label_id], prob, results[1])
-    else:
-        print('%s %.2f\n%.1fms' % (labels[label_id], prob, results[1]))
+
 
     if do_save_images:
         timestamp = time.time()
-        if label_id == 1 and prob > 0.85:
+        if label_id == 1 and prob > 0.90:
             camera.capture(f'/home/pi/Pictures/good/mow_{timestamp}.jpg')
         else:
             camera.capture(f'/home/pi/Pictures/bad/mow_{timestamp}.jpg')
 
-    return label_id, prob
+        if preview:
+            camera.annotate_text = '%s %.2f\n%.1fms' % (labels[label_id], prob, results[1])
+        else:
+            print('%s %.2f\n%.1fms' % (labels[label_id], prob, results[1]))
+
+        return label_id, prob
 
 
 def main():
@@ -112,11 +114,11 @@ def main():
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--model',
-                        help='File path of .tflite file. Default: /home/pi/mowerBot/image_classification/model/model.tflite',
-                        required=False, default='/home/pi/mowerBot/image_classification/model/model.tflite')
+                        help='File path of .tflite file. Default: /home/pi/mowerBot/image_classification/saved_model/model.tflite',
+                        required=False, default='/home/pi/mowerBot/image_classification/saved_model/model.tflite')
     parser.add_argument('--labels',
-                        help='File path of labels file. Default: /home/pi/mowerBot/image_classification/model/labelmap.txt',
-                        required=False, default='/home/pi/mowerBot/image_classification/model/labelmap.txt')
+                        help='File path of labels file. Default: /home/pi/mowerBot/image_classification/saved_model/labelmap.txt',
+                        required=False, default='/home/pi/mowerBot/image_classification/saved_model/labelmap.txt')
     parser.add_argument('--dry_run', help='Simulate motor control.', required=False, default=False)
     parser.add_argument('--video',
                         help='MP4 Video file for simulation the camera, can only be used with --dry_run together',
@@ -185,6 +187,8 @@ def main():
 
 
 def use_pi_camera(labels, width, height, interpreter, joystick, arduino, args):
+    global newClassificationResultAvailable
+    global imageClassificationResult
     preview = args.preview
     is_dry_run = args.dry_run
     do_save_images = args.save_images
@@ -193,7 +197,7 @@ def use_pi_camera(labels, width, height, interpreter, joystick, arduino, args):
     print("Use Pi Cam.", preview, labels, is_dry_run)
     label_id = 0
     prob = 0
-    with picamera.PiCamera(resolution=(320, 240), framerate=3) as camera:
+    with picamera.PiCamera(resolution=(320, 240), framerate=7) as camera:
         if preview:
             camera.start_preview()
 
@@ -207,10 +211,11 @@ def use_pi_camera(labels, width, height, interpreter, joystick, arduino, args):
                     job_queue.put(Job([interpreter, image]))
                     if newClassificationResultAvailable:
                         results = imageClassificationResult
-                        label_id, prob = process_result(results, do_save_images)
+                        newClassificationResultAvailable = False
+                        label_id, prob = process_result(results, doSaveImages, labels, stream, preview, camera)
                 else:
                     results = classify_image(interpreter, image)
-                    label_id, prob = process_result(results, do_save_images)
+                    label_id, prob = process_result(results, doSaveImages, labels, stream, preview, camera)
 
                 state = get_state(joystick, label_id, prob)
 
@@ -224,6 +229,8 @@ def use_pi_camera(labels, width, height, interpreter, joystick, arduino, args):
 
 
 def use_video(labels, video_path, is_dry_run, width, height, interpreter, joystick, arduino):
+    global newClassificationResultAvailable
+    global imageClassificationResult
     """Test the code using a video file"""
     video = cv2.VideoCapture(video_path)
     imW = video.get(cv2.CAP_PROP_FRAME_WIDTH)
@@ -330,14 +337,18 @@ def get_state(joystick, label_id, probability):
             return state
 
     if driveMode == "auto":
-        if label_id == 1 and probability >= 0.8:
+        if label_id == 1 and probability >= 0.9:
             state["command"] = "forward"
             state["motors"]["right"] = 255
             state["motors"]["left"] = 255
-        elif label_id == 1 and probability < 0.8:
+        elif label_id == 1 and probability < 0.9 and probability > 0.8:
             state["command"] = "forward"
-            state["motors"]["right"] = 255
-            state["motors"]["left"] = 0
+            state["motors"]["right"] = 150
+            state["motors"]["left"] = 150
+        elif label_id == 2:
+            state["command"] = "back"
+            state["motors"]["right"] = 150
+            state["motors"]["left"] = 150
         else:
             state["command"] = "stop"
             state["motors"]["right"] = 0
