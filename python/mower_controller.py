@@ -1,15 +1,33 @@
 #! /usr/bin/env python
 
+#
+# This file is part of the mowbot distribution (https://github.com/jefure/mowbot).
+# Copyright (c) 2022 Jens Reese.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, version 3.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
+#
+
 import time
 import os
 import pygame
 import serial
 import sys
-import struct
+import driver
 
-os.environ["SDL_VIDEODRIVER"] = "dummy" # Removes the need to have a GUI window
+os.environ["SDL_VIDEODRIVER"] = "dummy"  # Removes the need to have a GUI window
 pygame.init()
 arduino = serial.Serial('/dev/ttyACM0', 115200, timeout=.1)
+
 
 def main():
     print("Waiting for joystick... (press CTRL+C to abort)")
@@ -24,7 +42,7 @@ def main():
                     time.sleep(0.1)
                 else:
                     # We have a joystick, attempt to initialise it!
-                    joystick = pygame.joystick.Joystick(0)                    
+                    joystick = pygame.joystick.Joystick(0)
                     break
             except pygame.error:
                 pygame.joystick.quit()
@@ -33,56 +51,58 @@ def main():
         # CTRL+C exit, give up
         print("\nUser aborted")
         sys.exit()
-        
+
     joystick.init()
-    
+
     print("Joystick initialized")
-    
+
     try:
         while True:
-            state = getState(joystick)
-            
+            state = get_state(joystick)
+
             if state:
-                driver(state, arduino)
-                #mower_driver(state["mower"]["speed"], arduino)
+                driver.drive(state, arduino)
+                # mower_driver(state["mower"]["speed"], arduino)
     except KeyboardInterrupt:
         print("\nBye")
-    
-def getState(joystick):
-    state = {"command": "stop", "motors": {"left": 0, "right": 0}, "mower": {"speed": 0}, "updated": False, "running": True}
-    hadEvent = False
+
+
+def get_state(joystick):
+    state = {"command": "stop", "motors": {"left": 0, "right": 0}, "mower": {"speed": 0}, "updated": False,
+             "running": True}
+    had_event = False
     events = pygame.event.get()
     for event in events:
         if event.type == pygame.JOYAXISMOTION:
             # A joystick has been moved
-            hadEvent = True
+            had_event = True
 
-        if hadEvent:
-            upDown = -joystick.get_axis(1)
-            leftRight = -joystick.get_axis(2)
-            if leftRight < -0.05:
-                state["motors"]["left"] = 255 * leftRight
-            elif leftRight > 0.05:
-                state["motors"]["right"] = 255 * leftRight
+        if had_event:
+            up_down = -joystick.get_axis(1)
+            left_right = -joystick.get_axis(2)
+            if left_right < -0.05:
+                state["motors"]["left"] = 255 * left_right
+            elif left_right > 0.05:
+                state["motors"]["right"] = 255 * left_right
             else:
-                state["motors"]["right"] = 255 * upDown
-                state["motors"]["left"] = 255 * upDown
+                state["motors"]["right"] = 255 * up_down
+                state["motors"]["left"] = 255 * up_down
 
-            if upDown < -0.05:
+            if up_down < -0.05:
                 state["command"] = "back"
-            elif upDown > 0.05:
+            elif up_down > 0.05:
                 state["command"] = "forward"
             else:
                 state["command"] = "stop"
                 state["motors"]["right"] = 0
                 state["motors"]["left"] = 0
-                
+
             state["motors"]["right"] = int(state["motors"]["right"])
             state["motors"]["left"] = int(state["motors"]["left"])
-            
+
             if state["motors"]["right"] < 0:
                 state["motors"]["right"] = state["motors"]["right"] * -1
-            
+
             if state["motors"]["left"] < 0:
                 state["motors"]["left"] = state["motors"]["left"] * -1
 
@@ -90,18 +110,5 @@ def getState(joystick):
             return state
 
 
-def driver(state, arduino):
-    command = state["command"]
-    motors = state["motors"]
-    if command == "forward":
-        if motors["left"] == 0 and motors["right"] == 0:
-            arduino.write(struct.pack('>BBBB', 0, 0, 0, 0))
-        else:
-            arduino.write(struct.pack('>BBBB', motors["left"], motors["right"], 1, 255))
-    elif command == "back":
-            arduino.write(struct.pack('>BBBB', motors["left"], motors["right"], 2, 0))
-    else:
-        arduino.write(struct.pack('>BBBB', 0, 0, 0, 0))
-
-
-main()
+if __name__ == '__main__':
+    main()

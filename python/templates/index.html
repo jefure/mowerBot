@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Mowbot Control Center</title>
+</head>
+<body>
+<h2>Control</h2>
+        <form action="{{ url_for('play', playlist_id=entry[0]) }}" method="POST">
+            <input type="button" value="forward" class="btn btn-forward">
+            <input type="button" value="left" class="btn btn-left">
+            <input type="button" value="stop" class="btn btn-stop">
+            <input type="button" value="right" class="btn btn-right">
+            <input type="button" value="back" class="btn btn-back">
+            <input type="button" value="mow" class="btn btn-mow">
+        </form>
+</body>
+</html>
