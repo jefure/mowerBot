@@ -59,6 +59,7 @@ def classify_image(interpreter, image, top_k=1):
 
   ordered = np.argpartition(-output, top_k)
   elapsed_ms = (time.time() - start_time) * 1000
+  
   imageClassificationResult = [[(i, output[i]) for i in ordered[:top_k]], elapsed_ms]
   newClassificationResultAvailable = True
   
@@ -66,19 +67,21 @@ def classify_image(interpreter, image, top_k=1):
 
 def process_result(results, doSaveImages, labels, stream, preview, camera):
         label_id, prob = results[0][0]
+        
         stream.seek(0)
         stream.truncate()
+
+        if doSaveImages:
+            timestamp = time.time()
+            if label_id == 1 and prob > 0.90:
+                camera.capture(f'/home/pi/Pictures/good/mow_{timestamp}.jpg')
+            else:
+                camera.capture(f'/home/pi/Pictures/bad/mow_{timestamp}.jpg')
+
         if preview:
             camera.annotate_text = '%s %.2f\n%.1fms' % (labels[label_id], prob, results[1])
         else:
             print('%s %.2f\n%.1fms' % (labels[label_id], prob, results[1]))
-                
-        if doSaveImages:
-            timestamp = time.time()
-            if label_id == 1 and prob > 0.85:
-                camera.capture(f'/home/pi/Pictures/good/mow_{timestamp}.jpg')
-            else:
-                camera.capture(f'/home/pi/Pictures/bad/mow_{timestamp}.jpg')
 
         return label_id, prob
 
@@ -164,7 +167,7 @@ def usePiCamera(labels, width, height, interpreter, joystick, arduino, args):
     print("Use Pi Cam.", preview, labels, isDryRun)
     label_id = 0
     prob = 0
-    with picamera.PiCamera(resolution=(320, 240), framerate=5) as camera:
+    with picamera.PiCamera(resolution=(320, 240), framerate=7) as camera:
         if preview:
             camera.start_preview()
 
@@ -183,7 +186,6 @@ def usePiCamera(labels, width, height, interpreter, joystick, arduino, args):
             else:
                 results = classify_image(interpreter, image)
                 label_id, prob = process_result(results, doSaveImages, labels, stream, preview, camera)
-            
 
             state = getState(joystick, label_id, prob)
                 
@@ -304,11 +306,15 @@ def getState(joystick, label_id, probability):
     if driveMode == "auto":
         if label_id == 1 and probability >= 0.9:
             state["command"] = "forward"
-            state["motors"]["right"] = 240
-            state["motors"]["left"] = 255
-        elif label_id == 1 and probability < 0.9:           
-            state["command"] = "forward"
             state["motors"]["right"] = 255
+            state["motors"]["left"] = 255
+        elif label_id == 1 and probability < 0.9 and probability > 0.8:           
+            state["command"] = "forward"
+            state["motors"]["right"] = 150
+            state["motors"]["left"] = 150
+        elif label_id == 1 and probability <= 0.8:           
+            state["command"] = "forward"
+            state["motors"]["right"] = 250
             state["motors"]["left"] = 0
         elif label_id == 2:
             state["command"] = "back"
@@ -333,7 +339,7 @@ def driver(state, arduino, isDryRun):
             if motors["left"] == 0 and motors["right"] == 0:
                 arduino.write(struct.pack('>BBBB', 0, 0, 0, 0))
             else:
-                arduino.write(struct.pack('>BBBB', motors["left"], motors["right"], 1, 255))
+                arduino.write(struct.pack('>BBBB', motors["left"], motors["right"], 1, 0))
         elif command == "back":
                 arduino.write(struct.pack('>BBBB', motors["left"], motors["right"], 2, 0))
         else:

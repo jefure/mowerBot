@@ -6,6 +6,9 @@ import pygame
 import serial
 import sys
 import struct
+from sense_hat import SenseHat
+
+sense = SenseHat()
 
 os.environ["SDL_VIDEODRIVER"] = "dummy" # Removes the need to have a GUI window
 pygame.init()
@@ -58,7 +61,8 @@ def getState(joystick):
             hadEvent = True
 
         if hadEvent:
-            upDown = -joystick.get_axis(1)
+            print(event)
+            upDown = -joystick.get_axis(3)
             leftRight = -joystick.get_axis(2)
             if leftRight < -0.05:
                 state["motors"]["left"] = 255 * leftRight
@@ -91,13 +95,16 @@ def getState(joystick):
 
 
 def driver(state, arduino):
+    direction = round(sense.get_compass(), 0)
+    print("Heading: ", direction)
     command = state["command"]
     motors = state["motors"]
+    print(command)
     if command == "forward":
         if motors["left"] == 0 and motors["right"] == 0:
             arduino.write(struct.pack('>BBBB', 0, 0, 0, 0))
         else:
-            arduino.write(struct.pack('>BBBB', motors["left"], motors["right"], 1, 255))
+            arduino.write(struct.pack('>BBBB', motors["left"], motors["right"], 1, 0))
     elif command == "back":
             arduino.write(struct.pack('>BBBB', motors["left"], motors["right"], 2, 0))
     else:
