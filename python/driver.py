@@ -16,7 +16,6 @@
 #
 import struct
 
-
 def drive(state, serialcom):
     """
     Send the drive command to the arduino over serial connection
@@ -25,12 +24,13 @@ def drive(state, serialcom):
     """
     command = state["command"]
     motors = state["motors"]
+    mower_speed = state["mower"]["speed"]
     if command == "forward":
         if motors["left"] == 0 and motors["right"] == 0:
-            serialcom.write(struct.pack('>BBBB', 0, 0, 0, 0))
+            serialcom.write(struct.pack('>BBBB', 0, 0, 0, mower_speed))
         else:
-            serialcom.write(struct.pack('>BBBB', motors["left"], motors["right"], 1, 255))
+            serialcom.write(struct.pack('>BBBB', motors["left"], motors["right"], 1, mower_speed))
     elif command == "back":
-        serialcom.write(struct.pack('>BBBB', motors["left"], motors["right"], 2, 0))
+        serialcom.write(struct.pack('>BBBB', motors["left"], motors["right"], 2, mower_speed))
     else:
-        serialcom.write(struct.pack('>BBBB', 0, 0, 0, 0))
+        serialcom.write(struct.pack('>BBBB', 0, 0, 0, mower_speed))

@@ -1,5 +1,21 @@
 #! /usr/bin/env python
 
+#
+# This file is part of the mowbot distribution (https://github.com/jefure/mowbot).
+# Copyright (c) 2022 Jens Reese.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, version 3.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
+#
 import time
 import os
 import pygame
@@ -8,6 +24,7 @@ import serial
 import sys
 import struct
 import driver
+import state_handler
 from sense_hat import SenseHat
 from DFRobot_URM09 import *
 
@@ -33,6 +50,8 @@ def main():
     cam.start()
     pygame.display.set_caption('Mower Control')
     font = pygame.font.Font('freesansbold.ttf', 32)
+    state = {"command": "stop", "motors": {"left": 0, "right": 0}, "mower": {"speed": 0}, "updated": False,
+             "manual": True}
 
     setup_distance_sensor()
 
@@ -48,60 +67,42 @@ def main():
             if event.type == pygame.QUIT:
                 run = False
             if event.type == pygame.KEYDOWN:
-                print(pygame.key.name(event.key))
+                key = pygame.key.name(event.key)
+                print("Key pressed: " , key)
 
         keys = pygame.key.get_pressed()
+        sensor_data = get_sensors_data()
+        #print(sensor_data)
+        
+        state = state_handler.get_state(state, keys, sensor_data)
+        #print(state)
+        
+        ##reset mower speed to 0 for testing
+        state["mower"]["speed"] = 0
 
-        state = get_state(keys)
-
-        driver.drive(state, arduino)
-        direction = get_gyro()
-        # print("p: {pitch}, r: {roll}, y: {yaw}".format(**direction))
-        distance = read_distance()
-        yaw = round(direction["yaw"], 0)
-        text = font.render(str(yaw) + "° " + str(distance) + "cm", True, (0, 0, 128), (0, 0, 0))
-        # create a rectangular object for the
-        # text surface object
-        text_rect = text.get_rect()
-
-        # set the center of the rectangular object.
-        text_rect.center = (100, 20)
-        image1 = cam.get_image()
-        image1 = pygame.transform.scale(image1, (640, 480))
-        window.blit(image1, (0, 0))
-        window.blit(text, text_rect)
-
-        pygame.display.flip()
+        driver.drive(state, arduino)        
+        
+        display(sensor_data, window, font, cam)
 
     pygame.quit()
     exit()
 
 
-def get_state(keys):
-    state = {"command": "stop", "motors": {"left": 0, "right": 0}, "mower": {"speed": 0}, "updated": False,
-             "running": True}
-    vel = 0.5
+def display(sensor_data, window, font, cam):
+    yaw = round(sensor_data["direction"], 0)
+    text = font.render(str(yaw) + "° " + str(sensor_data["distance"]) + "cm", True, (0, 0, 128), (0, 0, 0))
+    # create a rectangular object for the
+    # text surface object
+    text_rect = text.get_rect()
+    # set the center of the rectangular object.
+    text_rect.center = (100, 20)
+    image1 = cam.get_image()
+    image1 = pygame.transform.scale(image1, (640, 480))
+    window.blit(image1, (0, 0))
+    window.blit(text, text_rect)
 
-    if keys[pygame.K_RIGHT] == 1:
-        state["command"] = "forward"
-        state["motors"]["right"] = 255 * vel
-    elif keys[pygame.K_LEFT] == 1:
-        state["command"] = "forward"
-        state["motors"]["left"] = 255 * vel
-    elif keys[pygame.K_UP] == 1:
-        state["command"] = "forward"
-        state["motors"]["right"] = 255 * vel
-        state["motors"]["left"] = 255 * vel
-    elif keys[pygame.K_DOWN] == 1:
-        state["command"] = "back"
-        state["motors"]["right"] = 255 * vel
-        state["motors"]["left"] = 255 * vel
+    pygame.display.flip()
 
-    state["motors"]["right"] = int(state["motors"]["right"])
-    state["motors"]["left"] = int(state["motors"]["left"])
-
-    state["updated"] = True
-    return state
 
 
 def setup_distance_sensor():
@@ -114,12 +115,16 @@ def setup_distance_sensor():
       _MEASURE_RANG_300              Ranging from 300
       _MEASURE_RANG_150              Ranging from 150
     """
-    urm09.set_mode_range(urm09.MEASURE_MODE_AUTOMATIC, urm09.MEASURE_RANG_150)
+    urm09.set_mode_range(urm09.MEASURE_MODE_AUTOMATIC, urm09._MEASURE_RANG_300)
 
 
-def read_distance():
-    # Read distance register
-    return urm09.get_distance()
+def get_sensors_data():
+    """
+    Get the combines data from the distance sensor and the sense hat.
+    return dictonary with the values for 'distance' and 'direction'
+    """
+    data = get_orientation()
+    return {"distance": urm09.get_distance(), "direction": data["yaw"], "roll": data["roll"], "pitch": data["pitch"]}
 
 
 def get_gyro():
